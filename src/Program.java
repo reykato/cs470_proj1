@@ -14,8 +14,10 @@ public class Program {
 
         if(args.length <= 0)
             return;
-        r = new java.io.FileReader("test1.minc");
-        // r = new java.io.FileReader(args[0]);
+        // r = new java.io.FileReader("test1.minc");
+        r = new java.io.FileReader(args[0]);
+
+        // System.out.println("Starting Compilation...");
 
         Compiler compiler = new Compiler(r);
         compiler.Compile();
