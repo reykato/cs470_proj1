@@ -10,9 +10,13 @@ public class Lexer
     public int             lineno;   // line number
     public int             column;   // column
     ArrayList<Character>   input;    // arraylist of all characters in file
+    private char buff1[];
+    private char buff2[];
+    private boolean buff1_active;
     private int            f;
     private int            lB;
     public HashMap<String, Integer> symbol_table;
+
 
     public Lexer(java.io.Reader reader, Parser yyparser) throws Exception
     {
@@ -24,17 +28,19 @@ public class Lexer
     }
 
     private void init() throws Exception {
-        // initialize arraylist
-        this.f = -1;
+        this.f = 0;
         this.lB = 1;
-        this.input = new ArrayList<>();
-        int data = reader.read();
-        if (data != -1) this.input.add((char) data);
-        while(data != -1){
-            data = reader.read();
-            char dataChar = (char) data;
-            this.input.add(dataChar);
-        }
+        // this.input = new ArrayList<>();
+        // int data = reader.read();
+        // if (data != -1) this.input.add((char) data);
+        // while(data != -1){
+        //     data = reader.read();
+        //     char dataChar = (char) data;
+        //     this.input.add(dataChar);
+        // }
+
+        // initialize buffers
+        
 
         this.symbol_table = new HashMap<>();
         // initialize symbol table
@@ -61,6 +67,14 @@ public class Lexer
         // }
         // this.column++;
         // return (char)data;
+
+        if (buff1_active) {
+
+            return buff1[f1];
+
+        } else {
+
+        }
         
         this.column++;
         this.f++;
@@ -87,6 +101,15 @@ public class Lexer
         }
         return "id";
     }
+
+    private String get_id_or_num(int start, int end) {
+        String ret_val = "";
+        for (int i = start; i < end; i++) {
+            ret_val += this.input.get(i);
+        }
+        return ret_val;
+    }
+
 
     // * If yylex reach to the end of file, return  0
     // * If there is an lexical error found, return -1
@@ -211,10 +234,7 @@ public class Lexer
                     else { this.f--; state = 23; }
                     continue;
                 case 23: // number state
-                    String num = "";
-                    for (int i = lB; i < f; i++) {
-                        num += this.input.get(i);
-                    }
+                    String num = get_id_or_num(this.lB, this.f);
                     yyparser.yylval = new ParserVal((Object)num);
                     
                     this.column = this.lB;
@@ -234,10 +254,7 @@ public class Lexer
                     else { state = 25; }   
                     continue;    
                 case 25: // id/keyword return state
-                    String in = "";
-                    for (int i = lB; i < f; i++) {
-                        in += this.input.get(i);
-                    }
+                    String in = get_id_or_num(this.lB, this.f);
                     yyparser.yylval = new ParserVal((Object)in);
                     this.install_id(in);
                     // String token = this.get_token(in);
