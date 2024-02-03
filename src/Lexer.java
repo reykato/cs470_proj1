@@ -6,44 +6,28 @@ public class Lexer
     private static final char EOF        =  0;
 
     private Parser         yyparser; // parent parser object
-    private java.io.Reader reader;   // input stream
+    // private java.io.Reader reader;   // input stream
     public int             lineno;   // line number
     public int             column;   // column
     ArrayList<Character>   input;    // arraylist of all characters in file
-    private char buff1[];
-    private char buff2[];
-    private boolean buff1_active;
-    private int            f;
     private int            lB;
     public HashMap<String, Integer> symbol_table;
+    DoubleBuffer buffer;
 
 
     public Lexer(java.io.Reader reader, Parser yyparser) throws Exception
     {
-        this.reader   = reader;
+        // this.reader   = reader;
         this.yyparser = yyparser;
-        lineno = 1;
-        column = 0;
-        init();
+        this.lineno = 1;
+        this.column = 0;
+        this.lB = 0;
+        this.buffer = new DoubleBuffer(10, reader);
+        initialize_symbol_table();
     }
 
-    private void init() throws Exception {
-        this.f = 0;
-        this.lB = 1;
-        // this.input = new ArrayList<>();
-        // int data = reader.read();
-        // if (data != -1) this.input.add((char) data);
-        // while(data != -1){
-        //     data = reader.read();
-        //     char dataChar = (char) data;
-        //     this.input.add(dataChar);
-        // }
-
-        // initialize buffers
-        
-
+    private void initialize_symbol_table() throws Exception {
         this.symbol_table = new HashMap<>();
-        // initialize symbol table
         this.symbol_table.put("int", Parser.INT);
         this.symbol_table.put("print", Parser.PRINT);
         this.symbol_table.put("var", Parser.VAR);
@@ -57,31 +41,31 @@ public class Lexer
         this.symbol_table.put("end", Parser.END);
     }
 
-    public char NextChar() throws Exception
-    {
-        // http://tutorials.jenkov.com/java-io/readers-writers.html
-        // int data = reader.read();
-        // if(data == -1)
-        // {
-        //     return EOF;
-        // }
-        // this.column++;
-        // return (char)data;
+    // public char NextChar() throws Exception
+    // {
+    //     // http://tutorials.jenkov.com/java-io/readers-writers.html
+    //     // int data = reader.read();
+    //     // if(data == -1)
+    //     // {
+    //     //     return EOF;
+    //     // }
+    //     // this.column++;
+    //     // return (char)data;
 
-        if (buff1_active) {
+    //     if (buff1_active) {
 
-            return buff1[f1];
+    //         return buff1[f1];
 
-        } else {
+    //     } else {
 
-        }
+    //     }
         
-        this.column++;
-        this.f++;
-        if (this.f < this.input.size()){
-            return (char) this.input.get(this.f);
-        } else return EOF;
-    }
+    //     this.column++;
+    //     buffer.f++;
+    //     if (buffer.f < this.input.size()){
+    //         return (char) this.input.get(buffer.f);
+    //     } else return EOF;
+    // }
     public int Fail()
     {
         return -1;
@@ -105,7 +89,7 @@ public class Lexer
     private String get_id_or_num(int start, int end) {
         String ret_val = "";
         for (int i = start; i < end; i++) {
-            ret_val += this.input.get(i);
+            ret_val += this.buffer.curr_buff[i];
         }
         return ret_val;
     }
@@ -123,10 +107,11 @@ public class Lexer
         while(true)
         {
             char c;
+            yyparser.yylval = new ParserVal();
             switch(state)
             {
                 case 0:
-                    c = NextChar();
+                    c = buffer.NextChar();
                     if (c == '+')               { state = 1; continue; }
                     if (c == '-')               { state = 2; continue; }
                     if (c == '*')               { state = 3; continue; }
@@ -146,7 +131,7 @@ public class Lexer
                     if (c == '\n')              { state = 27; continue; }
                     if (c == '\r')              { state = 28; continue; }
                     if (c == EOF)               { state = 9999; continue; }
-                    // System.out.print("character: "); System.out.print( "\\u" + Integer.toHexString(c | 0x10000).substring(1) ); System.out.println(" got through. this.f: " + this.f + " and this.input.size(): " + this.input.size());
+                    // System.out.print("character: "); System.out.print( "\\u" + Integer.toHexString(c | 0x10000).substring(1) ); System.out.println(" got through. buffer.f: " + buffer.f + " and this.input.size(): " + this.input.size());
                     return Fail();
                 case 1:
                     yyparser.yylval = new ParserVal((Object)"+");
@@ -161,7 +146,7 @@ public class Lexer
                     yyparser.yylval = new ParserVal((Object)"/");
                     return Parser.OP;
                 case 5:
-                    c = NextChar();
+                    c = buffer.NextChar();
                     if (c == '=') { state = 6; }
                     else if (c == '>') { state = 7; }
                     else { state = 8; }
@@ -174,11 +159,11 @@ public class Lexer
                     return Parser.RELOP;
                 case 8:
                     yyparser.yylval = new ParserVal((Object)"<");
-                    this.f--; // retract
+                    buffer.f--; // retract
                     this.column--;
                     return Parser.RELOP;
                 case 9:
-                    c = NextChar();
+                    c = buffer.NextChar();
                     if (c == '=') { state = 10; }
                     else { state = 11; }
                     continue;
@@ -187,7 +172,7 @@ public class Lexer
                     return Parser.RELOP;
                 case 11:
                     yyparser.yylval = new ParserVal((Object)">");
-                    this.f--; // retract
+                    buffer.f--; // retract
                     this.column--;
                     return Parser.RELOP;
                 case 12:
@@ -206,7 +191,7 @@ public class Lexer
                     yyparser.yylval = new ParserVal((Object)",");
                     return Parser.COMMA;
                 case 17: // assign, typeof
-                    c = NextChar();
+                    c = buffer.NextChar();
                     if (c == '=') { state = 18; }
                     else if (c == ':') { state = 19; }
                     continue;
@@ -217,48 +202,48 @@ public class Lexer
                     yyparser.yylval = new ParserVal((Object)"::");
                     return Parser.TYPEOF;
                 case 20: // number state
-                    this.lB = this.f;
-                    c = NextChar();
+                    this.lB = buffer.f;
+                    c = buffer.NextChar();
                     if (Character.isDigit(c)) { state = 21; }
                     else { state = 23; }
                     continue;
                 case 21: // number state
-                    c = NextChar();
+                    c = buffer.NextChar();
                     if (Character.isDigit(c)) { break; }
                     else if (c == '.') { state = 22; }
                     else { state = 23; }
                     continue;
                 case 22: // number state
-                    c = NextChar();
+                    c = buffer.NextChar();
                     if (Character.isDigit(c)) { break; }
-                    else { this.f--; state = 23; }
+                    else { buffer.f--; state = 23; }
                     continue;
                 case 23: // number state
-                    String num = get_id_or_num(this.lB, this.f);
+                    String num = get_id_or_num(this.lB, this.buffer.f);
                     yyparser.yylval = new ParserVal((Object)num);
                     
                     this.column = this.lB;
-                    this.lB = this.f - this.lB;
+                    this.lB = buffer.f - this.lB;
                     return Parser.NUM;
                 case 24: // id/keyword initial state
-                    this.lB = this.f;
-                    c = NextChar();
+                    this.lB = this.buffer.f;
+                    c = this.buffer.NextChar();
                     this.column--;
                     if (Character.isLetter(c) || c == '_') { state = 241; }
-                    else { state = 25;}
+                    else { state = 25; }
                     continue;
                 case 241: // id/keyword loop state
-                    c = NextChar();
+                    c = buffer.NextChar();
                     this.column--;
                     if (Character.isLetter(c) || c == '_') { state = 241; }
                     else { state = 25; }   
                     continue;    
                 case 25: // id/keyword return state
-                    String in = get_id_or_num(this.lB, this.f);
+                    String in = get_id_or_num(this.lB, this.buffer.f);
                     yyparser.yylval = new ParserVal((Object)in);
                     this.install_id(in);
                     // String token = this.get_token(in);
-                    this.f--; // retract
+                    buffer.f--; // retract
                     this.column--;
                     return this.symbol_table.get(in);
                 case 26: // whitespace
