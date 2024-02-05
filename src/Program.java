@@ -12,10 +12,10 @@ public class Program {
         //
         //  args = new String[] { "proj1-minic-tokenizer\\src\\test1.minc" };
 
-        if(args.length <= 0)
-            return;
+        // if(args.length <= 0)
+        //     return;
         // r = new java.io.FileReader("test1.minc");
-        r = new java.io.FileReader(args[0]);
+        r = new java.io.FileReader("C:/Users/Tyler/Documents/VSCode/cs470_proj1/proj1-minic-tokenizer-startup/src/test7.minc");
 
         // System.out.println("Starting Compilation...");
 

@@ -1,5 +1,3 @@
-import java.util.HashMap;
-
 public class Parser
 {
     public static final int OP          = 10;    // +  -  *  /

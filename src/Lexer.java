@@ -10,7 +10,6 @@ public class Lexer
     public int             lineno;   // line number
     public int             column;   // column
     ArrayList<Character>   input;    // arraylist of all characters in file
-    private int            lB;
     public HashMap<String, Integer> symbol_table;
     DoubleBuffer buffer;
 
@@ -21,7 +20,6 @@ public class Lexer
         this.yyparser = yyparser;
         this.lineno = 1;
         this.column = 0;
-        this.lB = 0;
         this.buffer = new DoubleBuffer(10, reader);
         initialize_symbol_table();
     }
@@ -86,12 +84,9 @@ public class Lexer
         return "id";
     }
 
-    private String get_id_or_num(int start, int end) {
-        String ret_val = "";
-        for (int i = start; i < end; i++) {
-            ret_val += this.buffer.curr_buff[i];
-        }
-        return ret_val;
+    private char NextChar() throws Exception {
+        this.column++;
+        return this.buffer.NextChar();
     }
 
 
@@ -104,14 +99,18 @@ public class Lexer
     public int yylex() throws Exception
     {
         int state = 0;
+        boolean[] id_status = {false, false}; // [id started in different buffer than it ended, if they are different, the id started in buffer 0]
+
         while(true)
         {
             char c;
             yyparser.yylval = new ParserVal();
+
+            // System.out.println("State: " + state);
             switch(state)
             {
                 case 0:
-                    c = buffer.NextChar();
+                    c = NextChar();
                     if (c == '+')               { state = 1; continue; }
                     if (c == '-')               { state = 2; continue; }
                     if (c == '*')               { state = 3; continue; }
@@ -146,7 +145,7 @@ public class Lexer
                     yyparser.yylval = new ParserVal((Object)"/");
                     return Parser.OP;
                 case 5:
-                    c = buffer.NextChar();
+                    c = NextChar();
                     if (c == '=') { state = 6; }
                     else if (c == '>') { state = 7; }
                     else { state = 8; }
@@ -159,11 +158,10 @@ public class Lexer
                     return Parser.RELOP;
                 case 8:
                     yyparser.yylval = new ParserVal((Object)"<");
-                    buffer.f--; // retract
                     this.column--;
                     return Parser.RELOP;
                 case 9:
-                    c = buffer.NextChar();
+                    c = NextChar();
                     if (c == '=') { state = 10; }
                     else { state = 11; }
                     continue;
@@ -172,7 +170,6 @@ public class Lexer
                     return Parser.RELOP;
                 case 11:
                     yyparser.yylval = new ParserVal((Object)">");
-                    buffer.f--; // retract
                     this.column--;
                     return Parser.RELOP;
                 case 12:
@@ -191,7 +188,7 @@ public class Lexer
                     yyparser.yylval = new ParserVal((Object)",");
                     return Parser.COMMA;
                 case 17: // assign, typeof
-                    c = buffer.NextChar();
+                    c = NextChar();
                     if (c == '=') { state = 18; }
                     else if (c == ':') { state = 19; }
                     continue;
@@ -201,50 +198,83 @@ public class Lexer
                 case 19:
                     yyparser.yylval = new ParserVal((Object)"::");
                     return Parser.TYPEOF;
-                case 20: // number state
-                    this.lB = buffer.f;
-                    c = buffer.NextChar();
+                case 20: // initial number state
+                    id_status[1] = this.buffer.buff0_active;
+                    this.buffer.lB = this.buffer.f - 1;
+
+                    c = NextChar();
                     if (Character.isDigit(c)) { state = 21; }
+                    else if (c == '.') { state = 22; }
                     else { state = 23; }
                     continue;
                 case 21: // number state
-                    c = buffer.NextChar();
+                    c = NextChar();
                     if (Character.isDigit(c)) { break; }
                     else if (c == '.') { state = 22; }
                     else { state = 23; }
                     continue;
-                case 22: // number state
-                    c = buffer.NextChar();
-                    if (Character.isDigit(c)) { break; }
-                    else { buffer.f--; state = 23; }
-                    continue;
-                case 23: // number state
-                    String num = get_id_or_num(this.lB, this.buffer.f);
-                    yyparser.yylval = new ParserVal((Object)num);
+                case 22: // number state after '.'
+                    c = NextChar();
                     
-                    this.column = this.lB;
-                    this.lB = buffer.f - this.lB;
+                    if (c == '.' || Character.isLetter(c) || c == '_') { return Fail(); }
+                    else if (Character.isDigit(c)) { break; }
+                    else { state = 23; }
+                    continue;
+                case 23: // final number state
+                    String num;
+
+                    id_status[0] = (id_status[1] != this.buffer.buff0_active); // if the id started and ended in different buffers
+
+                    num = this.buffer.get_id_or_num(id_status);
+                    yyparser.yylval = new ParserVal((Object)num);
+
+                    if (id_status[0]) {
+                        this.buffer.fillBuffer(id_status[1]);
+                        if (this.buffer.f == 0) {
+                            this.buffer.f = 8;
+                        } else {
+                            this.buffer.f--;
+                        }
+                    } else {
+                        this.buffer.f--;
+                    }
+
+                    // this.buffer.lB = buffer.f - this.buffer.lB;
                     return Parser.NUM;
                 case 24: // id/keyword initial state
-                    this.lB = this.buffer.f;
-                    c = this.buffer.NextChar();
-                    this.column--;
+                    id_status[1] = this.buffer.buff0_active;
+                    this.buffer.lB = this.buffer.f - 1;
+
+                    c = NextChar();
                     if (Character.isLetter(c) || c == '_') { state = 241; }
                     else { state = 25; }
                     continue;
                 case 241: // id/keyword loop state
-                    c = buffer.NextChar();
+                    c = NextChar();
                     this.column--;
                     if (Character.isLetter(c) || c == '_') { state = 241; }
-                    else { state = 25; }   
+                    else { state = 25; }
                     continue;    
                 case 25: // id/keyword return state
-                    String in = get_id_or_num(this.lB, this.buffer.f);
+                    String in;
+
+                    id_status[0] = (id_status[1] != this.buffer.buff0_active); // if the id started and ended in different buffers
+
+                    in = buffer.get_id_or_num(id_status);
                     yyparser.yylval = new ParserVal((Object)in);
                     this.install_id(in);
-                    // String token = this.get_token(in);
-                    buffer.f--; // retract
-                    this.column--;
+
+                    if (id_status[0]) {
+                        this.buffer.fillBuffer(id_status[1]);
+                        if (this.buffer.f == 0) {
+                            this.buffer.f = 8;
+                        } else {
+                            this.buffer.f--;
+                        }
+                    } else {
+                        this.buffer.f--;
+                    }
+
                     return this.symbol_table.get(in);
                 case 26: // whitespace
                     state = 0;
