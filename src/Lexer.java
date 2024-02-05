@@ -12,6 +12,8 @@ public class Lexer
     ArrayList<Character>   input;    // arraylist of all characters in file
     public HashMap<String, Integer> symbol_table;
     DoubleBuffer buffer;
+    boolean fail_next = false; // set true if you need the program to fail after returning
+    public int columns_to_add; // for use after an ID is read
 
 
     public Lexer(java.io.Reader reader, Parser yyparser) throws Exception
@@ -20,6 +22,7 @@ public class Lexer
         this.yyparser = yyparser;
         this.lineno = 1;
         this.column = 0;
+        this.columns_to_add = 0;
         this.buffer = new DoubleBuffer(10, reader);
         initialize_symbol_table();
     }
@@ -95,22 +98,22 @@ public class Lexer
     // * If a proper lexeme is determined, return token <token-id, token-attribute> as follows:
     //   1. set token-attribute into yyparser.yylval
     //   2. return token-id defined in Parser
-    //   token attribute can be lexeme, line number, colume, etc.
+    //   token attribute can be lexeme, line number, column, etc.
     public int yylex() throws Exception
     {
         int state = 0;
         boolean[] id_status = {false, false}; // [id started in different buffer than it ended, if they are different, the id started in buffer 0]
-
+        if (this.columns_to_add != 0) { this.column += this.columns_to_add; this.columns_to_add = 0; }
+        if (this.fail_next) { this.fail_next = false; return Fail(); }
         while(true)
         {
             char c;
             yyparser.yylval = new ParserVal();
-
-            // System.out.println("State: " + state);
             switch(state)
             {
                 case 0:
                     c = NextChar();
+                    if (c == EOF)               { state = 9999; continue; }
                     if (c == '+')               { state = 1; continue; }
                     if (c == '-')               { state = 2; continue; }
                     if (c == '*')               { state = 3; continue; }
@@ -129,7 +132,7 @@ public class Lexer
                         || c == '\f')           { state = 26; continue; }
                     if (c == '\n')              { state = 27; continue; }
                     if (c == '\r')              { state = 28; continue; }
-                    if (c == EOF)               { state = 9999; continue; }
+                    
                     // System.out.print("character: "); System.out.print( "\\u" + Integer.toHexString(c | 0x10000).substring(1) ); System.out.println(" got through. buffer.f: " + buffer.f + " and this.input.size(): " + this.input.size());
                     return Fail();
                 case 1:
@@ -155,10 +158,17 @@ public class Lexer
                     return Parser.RELOP;
                 case 7:
                     yyparser.yylval = new ParserVal((Object)"<>");
+                    this.column--;
                     return Parser.RELOP;
                 case 8:
                     yyparser.yylval = new ParserVal((Object)"<");
                     this.column--;
+                    if (this.buffer.f == 0) {
+                        this.buffer.swapBuffers();
+                        this.buffer.f = 8;
+                    } else {
+                        this.buffer.f--;
+                    }
                     return Parser.RELOP;
                 case 9:
                     c = NextChar();
@@ -171,6 +181,12 @@ public class Lexer
                 case 11:
                     yyparser.yylval = new ParserVal((Object)">");
                     this.column--;
+                    if (this.buffer.f == 0) {
+                        this.buffer.swapBuffers();
+                        this.buffer.f = 8;
+                    } else {
+                        this.buffer.f--;
+                    }
                     return Parser.RELOP;
                 case 12:
                     yyparser.yylval = new ParserVal((Object)"=");
@@ -194,6 +210,7 @@ public class Lexer
                     continue;
                 case 18:
                     yyparser.yylval = new ParserVal((Object)":=");
+                    this.column--;
                     return Parser.ASSIGN;
                 case 19:
                     yyparser.yylval = new ParserVal((Object)"::");
@@ -207,16 +224,29 @@ public class Lexer
                     else if (c == '.') { state = 22; }
                     else { state = 23; }
                     continue;
-                case 21: // number state
+                case 21: // number state (before '.')
                     c = NextChar();
+                    this.column--;
+                    this.columns_to_add++;
+
                     if (Character.isDigit(c)) { break; }
                     else if (c == '.') { state = 22; }
-                    else { state = 23; }
+                    else if (Character.isLetter(c) || c == '_') { state = 23; this.fail_next = true; }
+                    else { state = 221; }
                     continue;
-                case 22: // number state after '.'
+                case 22: // number state (after '.')
                     c = NextChar();
-                    
-                    if (c == '.' || Character.isLetter(c) || c == '_') { return Fail(); }
+                    this.column--;
+                    this.columns_to_add++;
+                    if (c == '.') { return Fail(); }
+                    // else if (Character.isLetter(c) || c == '_') { state = 23; }
+                    else { state = 221; }
+                    continue;
+                case 221: // number state (after '.' and number)
+                    c = NextChar();
+                    this.column--;
+                    this.columns_to_add++;
+                    if (c == '.' || Character.isLetter(c) || c == '_') { state = 23; this.fail_next = true; }
                     else if (Character.isDigit(c)) { break; }
                     else { state = 23; }
                     continue;
@@ -228,9 +258,12 @@ public class Lexer
                     num = this.buffer.get_id_or_num(id_status);
                     yyparser.yylval = new ParserVal((Object)num);
 
+                    this.column--;
+
                     if (id_status[0]) {
                         this.buffer.fillBuffer(id_status[1]);
                         if (this.buffer.f == 0) {
+                            this.buffer.swapBuffers();
                             this.buffer.f = 8;
                         } else {
                             this.buffer.f--;
@@ -239,20 +272,21 @@ public class Lexer
                         this.buffer.f--;
                     }
 
-                    // this.buffer.lB = buffer.f - this.buffer.lB;
+
                     return Parser.NUM;
                 case 24: // id/keyword initial state
                     id_status[1] = this.buffer.buff0_active;
                     this.buffer.lB = this.buffer.f - 1;
 
                     c = NextChar();
-                    if (Character.isLetter(c) || c == '_') { state = 241; }
+                    if (Character.isLetter(c) || c == '_' || Character.isDigit(c)) { state = 241; }
                     else { state = 25; }
                     continue;
                 case 241: // id/keyword loop state
                     c = NextChar();
                     this.column--;
-                    if (Character.isLetter(c) || c == '_') { state = 241; }
+                    this.columns_to_add++;
+                    if (Character.isLetter(c) || c == '_' || Character.isDigit(c)) { state = 241; }
                     else { state = 25; }
                     continue;    
                 case 25: // id/keyword return state
@@ -264,9 +298,11 @@ public class Lexer
                     yyparser.yylval = new ParserVal((Object)in);
                     this.install_id(in);
 
+                    this.column--;
                     if (id_status[0]) {
                         this.buffer.fillBuffer(id_status[1]);
                         if (this.buffer.f == 0) {
+                            this.buffer.swapBuffers();
                             this.buffer.f = 8;
                         } else {
                             this.buffer.f--;

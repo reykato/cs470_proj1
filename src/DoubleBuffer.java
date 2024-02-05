@@ -46,7 +46,7 @@ public class DoubleBuffer {
                 } 
 
             } else { // if the sentinel/eof is within the buffer, it's an eof
-                return '\0'; // return end of file
+                return 0; // return end of file
             }
         } else { // if non-eof character is read
             this.f++;
@@ -72,14 +72,16 @@ public class DoubleBuffer {
     private void fillBufferHelper(char[] buffer) throws IOException {
         int a;
         int i = 0;
+        for (int x = 0; x < this.buffer_size - 1; x++) {
+            buffer[x] = ' ';
+        }
         do {
             a = this.reader.read();
-            buffer[i] = (char) a;
+            if (a != -1) buffer[i] = (char) a;
             i++;
         } while (a != -1 && i < this.buffer_size - 1);
-        if (a != -1 ) buffer[this.buffer_size - 1] = '\0'; // sentinel
+        if (a != -1 && i != 9) buffer[this.buffer_size - 1] = '\0'; // sentinel
         else buffer[i] = '\0'; // eof in middle of the buffer 
-        // System.out.println(buffer);
     }
 
     public String get_id_or_num(boolean[] id_status) {
@@ -113,7 +115,7 @@ public class DoubleBuffer {
                     ret_val += this.buff0[i];
                 }
             }
-        }        
+        }
         return ret_val;
     }
 }
