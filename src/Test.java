@@ -9,7 +9,7 @@ public class Test {
                 PrintStream outHolder = System.out;
                 System.setOut(new PrintStream(new FileOutputStream("src/testout" + i + ".txt")));
                 String[] progArgs = new String[1];
-                progArgs[0] = "src/test" + i + ".minc";
+                progArgs[0] = "test" + i + ".minc";
                 Program.main(progArgs);
                 System.setOut(outHolder);
                 Reader solution = new FileReader("src/testsolu" + i + ".txt");
