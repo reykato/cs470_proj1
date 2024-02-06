@@ -7,13 +7,13 @@ public class Test {
         for (int i = 1; i <= NUMBER_OF_TESTS; i++) {
             try {
                 PrintStream outHolder = System.out;
-                System.setOut(new PrintStream(new FileOutputStream("src/testout" + i + ".txt")));
+                System.setOut(new PrintStream(new FileOutputStream("testout" + i + ".txt")));
                 String[] progArgs = new String[1];
                 progArgs[0] = "test" + i + ".minc";
                 Program.main(progArgs);
                 System.setOut(outHolder);
-                Reader solution = new FileReader("src/testsolu" + i + ".txt");
-                Reader test = new FileReader("src/testout" + i + ".txt");
+                Reader solution = new FileReader("testsolu" + i + ".txt");
+                Reader test = new FileReader("testout" + i + ".txt");
                 char[] solutionarr = new char[100000];
                 char[] testarr = new char[100000];
                 solution.read(solutionarr);
